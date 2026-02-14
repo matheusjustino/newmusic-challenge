@@ -1,0 +1,63 @@
+services:
+  database:
+    image: postgres:14.4-alpine
+    container_name: newmusic-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: docker
+      POSTGRES_DB: newmusic-db
+    ports:
+      - "5432:5432"
+    networks:
+      - newmusic_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: newmusic-backend
+    environment:
+      PORT: 8080
+      JWT_SECRET: logindobatman
+      # Use service name 'database' as host inside Docker network
+      DATABASE_URL: postgres://postgres:docker@database:5432/newmusic-db
+    ports:
+      - "8080:8080"
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - newmusic_network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080/api
+        INTERNAL_API_URL: http://backend:8080/api
+        NEXTAUTH_URL: http://localhost:3000
+        NEXTAUTH_SECRET: logindobatman
+    container_name: newmusic-frontend
+    environment:
+      # Browser should call host-exposed port; SSR should call Docker service name
+      NEXT_PUBLIC_API_URL: http://localhost:8080/api
+      INTERNAL_API_URL: http://backend:8080/api
+      NODE_ENV: development
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: logindobatman
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - newmusic_network
+
+networks:
+  newmusic_network:
